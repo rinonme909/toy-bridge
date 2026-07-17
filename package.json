@@ -1,0 +1,7 @@
+{
+  "name": "toy-bridge",
+  "type": "module",
+  "scripts": { "start": "node index.js" },
+  "dependencies": { "express": "^4.21.0" }
+}
+
