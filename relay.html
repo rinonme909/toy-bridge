@@ -1,0 +1,101 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>toy relay</title>
+<style>
+body{font-family:system-ui;background:#111;color:#eee;padding:20px;text-align:center}
+button{font-size:18px;padding:12px 28px;margin:10px;border:none;border-radius:8px;cursor:pointer}
+#btn-connect{background:#4a9eff;color:#fff}
+#btn-stop{background:#ff4a4a;color:#fff}
+#status{margin:20px 0;font-size:16px;min-height:60px}
+input{font-size:16px;padding:8px;width:80%;border-radius:6px;border:1px solid #555;background:#222;color:#eee;margin:6px 0}
+label{font-size:14px;color:#999}
+</style></head><body>
+<h2>toy relay</h2>
+<div>
+<label>中继地址</label><br>
+<input id="url" value="https://toy-bridge-production-0be0.up.railway.app/toy-next">
+</div>
+<br>
+<button id="btn-connect" onclick="start()">连接玩具</button>
+<button id="btn-stop" onclick="sendStop()">紧急停止</button>
+<div id="status">等待连接...</div>
+
+<script>
+const SVC = 0xFFE0, CHR = 0xFFE1;
+let char = null, alive = null, lastCmd = null, polling = null;
+
+function log(s){ document.getElementById('status').innerText = s; }
+
+async function start(){
+  try{
+    log('正在扫描...');
+    const dev = await navigator.bluetooth.requestDevice({
+      filters:[{namePrefix:'SL278'}],
+      optionalServices:[SVC]
+    });
+    log('连接中: ' + dev.name);
+    const srv = await dev.gatt.connect();
+    const svc = await srv.getPrimaryService(SVC);
+    char = await svc.getCharacteristic(CHR);
+    dev.addEventListener('gattserverdisconnected', ()=>{
+      log('断开了，请重新连接');
+      clearInterval(alive); clearInterval(polling);
+      char = null;
+    });
+    log('已连接: ' + dev.name + ' ✓');
+    startPolling();
+    startKeepalive();
+    try{ await navigator.wakeLock.request('screen'); }catch(e){}
+  }catch(e){ log('连接失败: ' + e.message); }
+}
+
+function startPolling(){
+  const url = document.getElementById('url').value;
+  polling = setInterval(async ()=>{
+    try{
+      const r = await fetch(url);
+      const d = await r.json();
+      if(!d) return;
+      if(d.stop){ sendStop(); return; }
+      if(d.speed !== undefined){
+        const v = Math.round(d.speed * 255);
+        const cmd = new Uint8Array([0x55,0x04,0x00,0x00,0x01,v,0xAA]);
+        lastCmd = cmd;
+        await writeCmd(cmd);
+        log('强度 ' + Math.round(d.speed*100) + '%');
+        if(d.sec){
+          setTimeout(()=>{ sendStop(); }, d.sec * 1000);
+        }
+      }
+      if(d.pattern !== undefined){
+        const lv = Math.round((d.level||0.5)*5);
+        const cmd = new Uint8Array([0x55,0x03,0x00,0x00,d.pattern,lv,0x00]);
+        lastCmd = cmd;
+        await writeCmd(cmd);
+        log('花样 ' + d.pattern + ' 强度 ' + lv);
+      }
+    }catch(e){}
+  }, 300);
+}
+
+function startKeepalive(){
+  alive = setInterval(async ()=>{
+    if(lastCmd && char){
+      try{ await writeCmd(lastCmd); }catch(e){}
+    }
+  }, 1500);
+}
+
+async function writeCmd(cmd){
+  if(!char) return;
+  await char.writeValueWithoutResponse(cmd);
+}
+
+async function sendStop(){
+  lastCmd = null;
+  const cmd = new Uint8Array([0x55,0x04,0x00,0x00,0x00,0x00,0xAA]);
+  if(char) await writeCmd(cmd);
+  log('已停止');
+}
+</script></body></html>
+
