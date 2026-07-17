@@ -2,7 +2,7 @@ import express from 'express';
 const app = express();
 app.use(express.json());
 
-const SECRET = process.env.BRIDGE_SECRET || 'changeme';
+const SECRET = 'babyrin99';
 const PORT = process.env.PORT || 3000;
 
 let queue = [];
