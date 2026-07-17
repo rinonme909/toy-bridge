@@ -136,6 +136,12 @@ function startPolling(){
         if(d.sec) setTimeout(()=>sendStop(),d.sec*1000);
       }
       if(d.pattern!==undefined){
+        if(d.raw){
+  const bytes=d.raw.match(/.{2}/g).map(h=>parseInt(h,16));
+  const cmd=new Uint8Array(bytes);
+  await writeCmd(cmd);
+  log('原始指令: '+d.raw,'ok');
+}
         const lv=Math.round((d.level||0.5)*5);
         const cmd=new Uint8Array([0x55,0x03,0x00,0x00,d.pattern,lv,0x00]);
         lastCmd=cmd;
